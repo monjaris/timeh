@@ -1,0 +1,13 @@
+# Xmake cache
+.xmake/
+build/
+
+# MacOS Cache
+.DS_Store
+
+# Client
+/compile_commands.json
+
+# Local usage
+/send.sh
+
