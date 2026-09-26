@@ -9,7 +9,7 @@ timeh include/common.hpp
 ```
 possible output:
 ```
-duration: 1054.959401 ms
+duration: 305.959401 ms
 ```
 
 
