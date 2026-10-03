@@ -9,6 +9,10 @@
 #include "defs.hpp"
 
 
+using Duration = std::chrono::duration<fp64, std::milli>;
+using timer = std::chrono::steady_clock;
+
+
 namespace config
 {
     constexpr const char* timeh_cpp = "/tmp/timeh_main.cpp";
@@ -58,7 +62,11 @@ int main(int argc, char** argv)
     }
 
 
-    constexpr const char* silencer = "2> /dev/null";
+    constexpr const char* silencer =
+        { "" }
+        // { "2> /dev/null" }
+    ;
+
     std::string command;
     std::string header;  // fed by user provided command line arg
 
@@ -76,7 +84,7 @@ int main(int argc, char** argv)
         header = argv[1];
 
         command = std::format(
-            "{} -include{} -std={} {} -I. -I./include -o {} -c {} 2> /dev/null",
+            "{} -include{} -std={} {} -I. -I./include -o {} -c {} {}",
             cfg::compiler, header, cfg::cpp_version, cfg::flags, cfg::timeh_out, cfg::timeh_cpp,
             opt::compiler_stderr ? "" : silencer
         );
@@ -88,11 +96,11 @@ int main(int argc, char** argv)
     }
 
 
-    auto start = std::chrono::steady_clock::now();
+    auto start = timer::now();
     int command_failed = ::system(command.c_str());
-    auto finish = std::chrono::steady_clock::now();
+    auto finish = timer::now();
 
-    std::chrono::duration<fp64, std::milli> elapsed = finish - start;
+    Duration elapsed = finish - start;
 
     if (!command_failed) {
         std::println("duration: \033[1m{}\033[3;34m ms\033[0m", elapsed.count());
