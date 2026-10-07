@@ -8,6 +8,6 @@ build/
 # Client
 /compile_commands.json
 
-# Local usage
+# Local
+/timeh
 /send.sh
-

@@ -63,8 +63,8 @@ int main(int argc, char** argv)
 
 
     constexpr const char* silencer =
-        { "" }
-        // { "2> /dev/null" }
+        // { "" }
+        { "2> /dev/null" }
     ;
 
     std::string command;
