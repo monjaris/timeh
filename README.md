@@ -28,14 +28,14 @@ Timeh can do two main jobs.
 1. show how much time a header takes from you
 2. which headers include which headers behind the scenes
 
-1)
+#1
 ```sh
 timeh iostream
 timeh SDL3/SDL.h  # searchs inside /usr/include/
 timeh ./include/parser.hpp
 ```
 
-2)
+#2
 ```sh
 timeh -t string  # shows a tree of includes
 timeh -t vexa/vexa.hpp
