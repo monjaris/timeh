@@ -6,6 +6,8 @@
 #include <array>
 #include <climits>
 #include <fstream>
+//
+#include <clixx/clixx.hpp>
 #include "defs.hpp"
 
 
@@ -13,53 +15,79 @@ using Duration = std::chrono::duration<fp64, std::milli>;
 using timer = std::chrono::steady_clock;
 
 
-namespace config
+namespace global_config
 {
     constexpr const char* timeh_cpp = "/tmp/timeh_main.cpp";
     constexpr const char* timeh_out = "/tmp/timeh.out";
 
     constexpr const char* compiler = "g++";
     constexpr const char* cpp_version = "c++23";
-    constexpr const char* flags = "-Wattributes";
+    constexpr const char* flags = "-Wattributes -isystem ";
 }
-namespace cfg = config;
+namespace globcfg = global_config;
 
-namespace option
+namespace config
 {
+    std::string header;
     bool include_tree = false;
     bool compiler_stderr = false;
 }
-namespace opt = option;
+namespace cfg = config;
+
+
+
+namespace cmd
+{
+    void defaultAction() {
+        clixx::exitWith(
+            "pass -h/--help to print usage\n"
+        );
+    }
+
+    void help() {
+        clixx::exitWith(
+            "<header> :  print duration of the header to get compiled in an empty TU\n"
+            "-t <header> :  print the tree of includes recursively\n"
+        );
+    }
+};
+
 
 
 int main(int argc, char** argv)
 {
-    if (argc == 2) {
-        opt::include_tree = false;
+    clixx::CLI cli = {argc, argv};
+    cli.parse();
+    const auto& values = cli.values();
+    const auto& options = cli.options();
+
+    if (values.size() >= 1) {
+        cfg::header = values.at(0).val();
+    } else if (options.size() == 0) {
+        cmd::defaultAction();
     }
-    else if (argc == 3 && !strcmp(argv[1], "-t")) {
-        opt::include_tree = true;
-    }
-    else if (argc == 3 && !strcmp(argv[1], "-v")) {
-        opt::compiler_stderr = true;
-    }
-    else if (argc == 3 && (!strcmp(argv[1], "-tv") || !strcmp(argv[1], "-vt"))) {
-        opt::include_tree = true;
-        opt::compiler_stderr = true;
-    }
-    else {
-        std::print(
-            "<header> :  print duration of the header to get compiled in an empty TU\n"
-            "-t <header> :  print the tree of includes recursively\n"
-        );
-        ::exit(0);
+
+    std::vector<usize> invalids;
+
+    for (const auto& opt : options) {
+        if (opt.is("-h", "--help")) cmd::help();
+
+        else if (opt.is("-t", "--tree")) {
+            cfg::include_tree = true;
+        }
+
+        else if (opt.is("-v", "--verbose")) {
+            cfg::compiler_stderr = true;
+        }
+
+        else {
+            clixx::exitWith(std::format("Unknown flag: {}", opt.name()).c_str());
+        }
     }
 
 
-    auto fout = std::fstream{cfg::timeh_cpp, std::ios::out};
-    if (!fout) {
-        std::println("[ERROR]: Could not create file '{}'", cfg::timeh_cpp);
-    }
+    auto fout = std::fstream{globcfg::timeh_cpp, std::ios::out};
+    if (!fout) std::println("[ERROR]: Could not create file '{}'", globcfg::timeh_cpp);
 
 
     constexpr const char* silencer =
@@ -68,30 +96,25 @@ int main(int argc, char** argv)
     ;
 
     std::string command;
-    std::string header;  // fed by user provided command line arg
 
-    if (opt::include_tree)
+    if (cfg::include_tree)
     {
-        header = argv[2];
-
         command = std::format(
             "{} -include{} -std={} {} -I. -I./include -o {} -H -c {}",
-            cfg::compiler, header, cfg::cpp_version, cfg::flags, cfg::timeh_out, cfg::timeh_cpp
+            globcfg::compiler, cfg::header, globcfg::cpp_version, globcfg::flags, globcfg::timeh_out, globcfg::timeh_cpp
         );
     }
     else
     {
-        header = argv[1];
-
         command = std::format(
             "{} -include{} -std={} {} -I. -I./include -o {} -c {} {}",
-            cfg::compiler, header, cfg::cpp_version, cfg::flags, cfg::timeh_out, cfg::timeh_cpp,
-            opt::compiler_stderr ? "" : silencer
+            globcfg::compiler, cfg::header, globcfg::cpp_version, globcfg::flags, globcfg::timeh_out, globcfg::timeh_cpp,
+            cfg::compiler_stderr ? "" : silencer
         );
     }
 
     bool is_header_a_path = false;
-    if (header.starts_with('/') || header.starts_with('~')) {
+    if (cfg::header.starts_with('/') || cfg::header.starts_with('~')) {
         is_header_a_path = true;
     }
 
@@ -105,6 +128,6 @@ int main(int argc, char** argv)
     if (!command_failed) {
         std::println("duration: \033[1m{}\033[3;34m ms\033[0m", elapsed.count());
     } else {
-        std::println("Header \033[31m'{}'\033[0m doesnt exist!", header);
+        std::println("Failed to compile header: \033[31m'{}'\033[0m!", cfg::header);
     }
 }
