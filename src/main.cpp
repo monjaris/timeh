@@ -1,22 +1,18 @@
 #include <chrono>
 //
 #include <clixx/clixx.hpp>
-#include <tinyfmt/tfmt.hpp>
-#include <unistd.h>
-#include "defs.hpp"
-
-
-using Duration = std::chrono::duration<fp64, std::milli>;
-using timer = std::chrono::steady_clock;
+#include "utils.hpp"
 
 
 namespace global_config
 {
+    const std::string gcc_ver = util::gccVersion();
+
     constexpr const char* timeh_cpp = "/tmp/timeh_main.cpp";
     constexpr const char* timeh_out = "/tmp/timeh.out";
 
     constexpr const char* compiler = "g++";
-    constexpr const char* cpp_version = "c++23";
+    constexpr const char* cpp_version = "c++26";
     constexpr const char* flags = "-Wattributes -isystem ";
 
     constexpr const char* silencer =
@@ -40,59 +36,6 @@ namespace config
 }
 namespace cfg = config;
 
-
-namespace util
-{
-    template<class... T>
-    int shellExec(tfmt::format_string<T...> fmt, T&&... args) {
-        return ::system(tfmt::format(fmt, std::forward<T>(args)...).c_str());
-    }
-
-
-    struct [[nodiscard]] ShellExecInfo {
-        int exit_status;
-        fp64 duration;
-    };
-
-    template<class... T>
-    ShellExecInfo shellExecTime(tfmt::format_string<T...> fmt, T&&... args) {
-        auto start = timer::now();
-        int status = ::system(tfmt::format(fmt, std::forward<T>(args)...).c_str());
-        auto finish = timer::now();
-        return { status, std::chrono::duration_cast<Duration>(finish - start).count() };
-    }
-
-
-    Own<FILE> openFile(const char* path) {
-        if (FILE* file = ::fopen(path, "w+")) {
-            return {file, ::fclose};
-        }
-        else {
-            clixx::exitWith("Could not open file");
-        }
-    }
-
-    bool pathExists(const char* path) {
-        return ::access(path, F_OK) == 0;
-    }
-
-    std::optional<std::string> findHeader(const std::string& header_name) {
-        if (pathExists(header_name.c_str())) {
-            return header_name;
-        } else {
-            std::string header = std::string("/usr/include/c++/16/") + header_name;
-
-            if (header.empty()) return std::nullopt;
-            else {
-                return header;
-            }
-        }
-    }
-
-    void argumentRequiredIf(bool cond) {
-        if (cond) clixx::exitWith("Expected <header-name>\n");
-    }
-}
 
 
 namespace cmd
@@ -132,7 +75,7 @@ namespace cmd
     void grepIncludes(const std::string& header) {
         util::argumentRequiredIf(header.empty());
 
-        auto found_header = util::findHeader(header);
+        auto found_header = util::findHeader(header, globcfg::gcc_ver);
         if (!found_header.has_value()) {
             clixx::exitWith(tfmt::format("Could not find header '{}'\n", header).c_str());
         }
@@ -146,7 +89,7 @@ namespace cmd
     void preprocPrintIncludes(const std::string header) {
         util::argumentRequiredIf(header.empty());
 
-        auto found_header = util::findHeader(header);
+        auto found_header = util::findHeader(header, globcfg::gcc_ver);
         if (!found_header.has_value()) {
             clixx::exitWith(tfmt::format("Could not find header '{}'\n", header).c_str());
         }
@@ -173,10 +116,11 @@ int main(int argc, char** argv)
     if (auto value_count = values.size()) {
         if (value_count != 2) {
             cfg::header = values.at(0).val();
-        } else {
-            clixx::exitWith(tfmt::format(
-                "Unexpected trailing argument(s). pass -h/--help for usage\n"
-            ).c_str(), 1);
+        }
+        else {
+            util::exitWith<1>(
+                "Unexpected trailing argument(s). pass -h/--help for usage"
+            );
         }
     } else if (options.size() == 0) {
         cmd::defaultAction();
@@ -205,8 +149,12 @@ int main(int argc, char** argv)
             cfg::print_includes = true;
         }
 
+        else if (opt.is("--gcc-version")) {
+            tfmt::println("{}", util::gccVersion());
+        }
+
         else {
-            clixx::exitWith(tfmt::format("Unknown flag: {}\n", opt.name()).c_str(), 1);
+            util::exitWith<1>("Unknown flag: {}", opt.name());
         }
     }
 

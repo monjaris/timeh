@@ -11,7 +11,7 @@ add_requires("tiny-fmt")
 
 --- CONFIG
 add_cxxflags(
-    "-std=c++23",
+    "-std=c++26",
     "-Wall", "-Wextra",
     "-fno-exceptions", "-fno-rtti"
 )
