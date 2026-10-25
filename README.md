@@ -37,6 +37,6 @@ timeh ./include/parser.hpp
 
 #2
 ```sh
-timeh -t string  # shows a tree of includes
-timeh -t vexa/vexa.hpp
+timeh string -t  # shows a tree of includes
+timeh vexa/vexa.hpp -i  # which headers does vexa public header include
 ```

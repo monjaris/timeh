@@ -68,7 +68,10 @@ namespace cmd
         );
 
         if (res.exit_status != 0) tfmt::println("Failed to process header '{}'", header);
-        else tfmt::println("duration: \033[1m{}\033[3;34m ms\033[0m", res.duration);
+        else tfmt::println(
+            "duration: \033[1m{}\033[3;34m ms\033[0m  \033[2m({})\033[0m",
+            res.duration, cfg::header
+        );
     }
 
 

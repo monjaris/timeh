@@ -122,14 +122,20 @@ std::optional<std::string> findHeader(const std::string& header_name, const std:
     if (pathExists(header_name.c_str())) {
         return header_name;
     }
-    else {
-        std::string header;
-        header.reserve(64);
-        (((header += "/usr/include/c++/") += gcc_ver) += "/") += header_name;
 
-        if (header.empty()) return std::nullopt;
-        else return header;
+    if (true) {
+        std::string header;  header.reserve(64);
+        (header += "/usr/include/") += header_name;
+        if (pathExists(header.c_str())) return header;
     }
+
+    if (true) {
+        std::string header;  header.reserve(64);
+        (((header += "/usr/include/c++/") += gcc_ver) += "/") += header_name;
+        if (pathExists(header.c_str())) return header;
+    }
+
+    return std::nullopt;
 }
 
 void argumentRequiredIf(bool cond) {
