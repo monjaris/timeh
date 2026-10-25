@@ -9,5 +9,5 @@ build/
 /compile_commands.json
 
 # Local
-/timeh
+/timeh*
 /send.sh
