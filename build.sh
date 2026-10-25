@@ -15,5 +15,3 @@ else
 fi
 
 xmake build -j$(nproc) -v "${PROJ}" || exit $?
-command cp "$copy_bin" ./"${PROJ}"
-./"${PROJ}" "$@"

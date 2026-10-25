@@ -1,13 +1,8 @@
-#include <cstring>
-#include <print>
 #include <chrono>
-#include <cstdlib>
-#include <unistd.h>
-#include <array>
-#include <climits>
-#include <fstream>
 //
 #include <clixx/clixx.hpp>
+#include <tinyfmt/tfmt.hpp>
+#include <unistd.h>
 #include "defs.hpp"
 
 
@@ -23,17 +18,81 @@ namespace global_config
     constexpr const char* compiler = "g++";
     constexpr const char* cpp_version = "c++23";
     constexpr const char* flags = "-Wattributes -isystem ";
+
+    constexpr const char* silencer =
+        // { "" }
+        { "2> /dev/null" }
+    ;
 }
 namespace globcfg = global_config;
 
+
 namespace config
 {
+    // values
     std::string header;
-    bool include_tree = false;
-    bool compiler_stderr = false;
+
+    // options
+    bool measure_time    = false;  // -t/--time
+    bool grep_includes   = false;  // -g/--grep
+    bool print_includes  = false;  // -i/--includes
+    bool verbose         = false;  // -v/--verbose
 }
 namespace cfg = config;
 
+
+namespace util
+{
+    template<class... T>
+    int shellExec(tfmt::format_string<T...> fmt, T&&... args) {
+        return ::system(tfmt::format(fmt, std::forward<T>(args)...).c_str());
+    }
+
+
+    struct [[nodiscard]] ShellExecInfo {
+        int exit_status;
+        fp64 duration;
+    };
+
+    template<class... T>
+    ShellExecInfo shellExecTime(tfmt::format_string<T...> fmt, T&&... args) {
+        auto start = timer::now();
+        int status = ::system(tfmt::format(fmt, std::forward<T>(args)...).c_str());
+        auto finish = timer::now();
+        return { status, std::chrono::duration_cast<Duration>(finish - start).count() };
+    }
+
+
+    Own<FILE> openFile(const char* path) {
+        if (FILE* file = ::fopen(path, "w+")) {
+            return {file, ::fclose};
+        }
+        else {
+            clixx::exitWith("Could not open file");
+        }
+    }
+
+    bool pathExists(const char* path) {
+        return ::access(path, F_OK) == 0;
+    }
+
+    std::optional<std::string> findHeader(const std::string& header_name) {
+        if (pathExists(header_name.c_str())) {
+            return header_name;
+        } else {
+            std::string header = std::string("/usr/include/c++/16/") + header_name;
+
+            if (header.empty()) return std::nullopt;
+            else {
+                return header;
+            }
+        }
+    }
+
+    void argumentRequiredIf(bool cond) {
+        if (cond) clixx::exitWith("Expected <header-name>\n");
+    }
+}
 
 
 namespace cmd
@@ -46,8 +105,58 @@ namespace cmd
 
     void help() {
         clixx::exitWith(
-            "<header> :  print duration of the header to get compiled in an empty TU\n"
-            "-t <header> :  print the tree of includes recursively\n"
+            "<header>:  print duration of the header to get compiled in an empty TU\n"
+            "-t/--time <header>:      (default option)\n"
+            "-g/--grep <header>:      using ugrep, print all '#include' instances\n"
+            "-i/--includes <header>:  first preprocess the header and then print all '#include' instances\n"
+            "-v/--verbose:            enable verbose output\n"
+        );
+    }
+
+
+    void measureCompileTime(const std::string& header, bool compiler_stderr) {
+        util::argumentRequiredIf(header.empty());
+        (void) util::openFile(globcfg::timeh_cpp);
+
+        auto res = util::shellExecTime(
+            "{} -include{} -std={} {} -I. -I./include -o {} -c {} {}",
+            globcfg::compiler, header, globcfg::cpp_version, globcfg::flags, globcfg::timeh_out, globcfg::timeh_cpp,
+            (compiler_stderr ? (""):(globcfg::silencer))
+        );
+
+        if (res.exit_status != 0) tfmt::println("Failed to process header '{}'", header);
+        else tfmt::println("duration: \033[1m{}\033[3;34m ms\033[0m", res.duration);
+    }
+
+
+    void grepIncludes(const std::string& header) {
+        util::argumentRequiredIf(header.empty());
+
+        auto found_header = util::findHeader(header);
+        if (!found_header.has_value()) {
+            clixx::exitWith(tfmt::format("Could not find header '{}'\n", header).c_str());
+        }
+
+        util::shellExec(
+            "grep -E '^[[:space:]]*#[[:space:]]*include[[:space:]]*[<\"]' '{}'",
+            found_header.value()
+        );
+    }
+
+    void preprocPrintIncludes(const std::string header) {
+        util::argumentRequiredIf(header.empty());
+
+        auto found_header = util::findHeader(header);
+        if (!found_header.has_value()) {
+            clixx::exitWith(tfmt::format("Could not find header '{}'\n", header).c_str());
+        }
+
+        util::shellExec(
+            "g++ -E -x c++ '{}' 2>/dev/null | "
+            "grep -E '^#[[:space:]]*[0-9]+[[:space:]]+\"' | "
+            "sed -E 's/^#[[:space:]]*[0-9]+[[:space:]]+\"([^\"]+)\".*/\\1/' | "
+            "sort -u",
+            found_header.value()
         );
     }
 };
@@ -61,73 +170,54 @@ int main(int argc, char** argv)
     const auto& values = cli.values();
     const auto& options = cli.options();
 
-    if (values.size() >= 1) {
-        cfg::header = values.at(0).val();
+    if (auto value_count = values.size()) {
+        if (value_count != 2) {
+            cfg::header = values.at(0).val();
+        } else {
+            clixx::exitWith(tfmt::format(
+                "Unexpected trailing argument(s). pass -h/--help for usage\n"
+            ).c_str(), 1);
+        }
     } else if (options.size() == 0) {
         cmd::defaultAction();
     }
 
-    std::vector<usize> invalids;
+    if (options.empty()) {
+        cfg::measure_time = true;
+    }
 
     for (const auto& opt : options) {
         if (opt.is("-h", "--help")) cmd::help();
 
-        else if (opt.is("-t", "--tree")) {
-            cfg::include_tree = true;
+        else if (opt.is("-t", "--time")) {
+            cfg::measure_time = true;
         }
 
         else if (opt.is("-v", "--verbose")) {
-            cfg::compiler_stderr = true;
+            cfg::verbose = true;
+        }
+
+        else if (opt.is("-g", "--grep")) {
+            cfg::grep_includes = true;
+        }
+
+        else if (opt.is("-i", "--includes")) {
+            cfg::print_includes = true;
         }
 
         else {
-            clixx::exitWith(std::format("Unknown flag: {}", opt.name()).c_str());
+            clixx::exitWith(tfmt::format("Unknown flag: {}\n", opt.name()).c_str(), 1);
         }
     }
 
 
-    auto fout = std::fstream{globcfg::timeh_cpp, std::ios::out};
-    if (!fout) std::println("[ERROR]: Could not create file '{}'", globcfg::timeh_cpp);
-
-
-    constexpr const char* silencer =
-        // { "" }
-        { "2> /dev/null" }
-    ;
-
-    std::string command;
-
-    if (cfg::include_tree)
-    {
-        command = std::format(
-            "{} -include{} -std={} {} -I. -I./include -o {} -H -c {}",
-            globcfg::compiler, cfg::header, globcfg::cpp_version, globcfg::flags, globcfg::timeh_out, globcfg::timeh_cpp
-        );
+    if (cfg::measure_time) {
+        cmd::measureCompileTime(cfg::header, cfg::verbose);
     }
-    else
-    {
-        command = std::format(
-            "{} -include{} -std={} {} -I. -I./include -o {} -c {} {}",
-            globcfg::compiler, cfg::header, globcfg::cpp_version, globcfg::flags, globcfg::timeh_out, globcfg::timeh_cpp,
-            cfg::compiler_stderr ? "" : silencer
-        );
+    if (cfg::grep_includes) {
+        cmd::grepIncludes(cfg::header);
     }
-
-    bool is_header_a_path = false;
-    if (cfg::header.starts_with('/') || cfg::header.starts_with('~')) {
-        is_header_a_path = true;
-    }
-
-
-    auto start = timer::now();
-    int command_failed = ::system(command.c_str());
-    auto finish = timer::now();
-
-    Duration elapsed = finish - start;
-
-    if (!command_failed) {
-        std::println("duration: \033[1m{}\033[3;34m ms\033[0m", elapsed.count());
-    } else {
-        std::println("Failed to compile header: \033[31m'{}'\033[0m!", cfg::header);
+    if (cfg::print_includes) {
+        cmd::preprocPrintIncludes(cfg::header);
     }
 }
