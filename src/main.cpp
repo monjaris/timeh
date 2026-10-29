@@ -41,13 +41,13 @@ namespace cfg = config;
 namespace cmd
 {
     void defaultAction() {
-        clixx::exitWith(
+        clixx::printExit(
             "pass -h/--help to print usage\n"
         );
     }
 
     void help() {
-        clixx::exitWith(
+        clixx::printExit(
             "<header>:  print duration of the header to get compiled in an empty TU\n"
             "-t/--time <header>:      (default option)\n"
             "-g/--grep <header>:      using ugrep, print all '#include' instances\n"
@@ -80,7 +80,7 @@ namespace cmd
 
         auto found_header = util::findHeader(header, globcfg::gcc_ver);
         if (!found_header.has_value()) {
-            clixx::exitWith(tfmt::format("Could not find header '{}'\n", header).c_str());
+            clixx::printExit(tfmt::format("Could not find header '{}'\n", header).c_str());
         }
 
         util::shellExec(
@@ -94,7 +94,7 @@ namespace cmd
 
         auto found_header = util::findHeader(header, globcfg::gcc_ver);
         if (!found_header.has_value()) {
-            clixx::exitWith(tfmt::format("Could not find header '{}'\n", header).c_str());
+            clixx::printExit(tfmt::format("Could not find header '{}'\n", header).c_str());
         }
 
         util::shellExec(
@@ -111,14 +111,14 @@ namespace cmd
 
 int main(int argc, char** argv)
 {
-    clixx::CLI cli = {argc, argv};
+    clixx::CmdLine cli = {argc, argv};
     cli.parse();
     const auto& values = cli.values();
     const auto& options = cli.options();
 
     if (auto value_count = values.size()) {
         if (value_count != 2) {
-            cfg::header = values.at(0).val();
+            cfg::header = values[0].str();
         }
         else {
             util::exitWith<1>(
