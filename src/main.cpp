@@ -112,7 +112,6 @@ namespace cmd
 int main(int argc, char** argv)
 {
     clixx::CmdLine cli = {argc, argv};
-    cli.parse();
     const auto& values = cli.values();
     const auto& options = cli.options();
 
